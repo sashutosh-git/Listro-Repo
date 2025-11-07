@@ -1,4 +1,4 @@
-# Amazon Comparator
+# Listro
 
 ## Setup Instructions
 
