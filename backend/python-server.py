@@ -21,7 +21,7 @@ def connect_to_sheet():
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
         ]
-        creds = Credentials.from_service_account_file("service_account.json", scopes=scopes)
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
         client = gspread.authorize(creds)
         sheet = client.open("UserCredentials").worksheet("Data")
         print("✅ Connected to Google Sheet: UserCredentials → Data")
@@ -69,8 +69,12 @@ from google.cloud.exceptions import Forbidden
 app = Flask(__name__)
 
 # ✅ Enable CORS properly for your frontend
-CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
-
+CORS(app, resources={r"/*": {
+    "origins": [
+        "http://localhost:5173",
+        "https://listro-frontend-648176215467.asia-south1.run.app"
+    ]
+}})
 
 # --- CONFIGURATION ---
 
@@ -229,16 +233,7 @@ def replace_placeholders(prompt: str, attributes: dict) -> str:
    return re.sub(pattern, replacer, prompt)
 
 
-@app.before_request
-def handle_preflight():
-    if request.method == "OPTIONS":
-        resp = app.make_default_options_response()
-        headers = resp.headers
-        headers['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-        headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        headers['Access-Control-Allow-Credentials'] = 'true'
-        return resp
+
 
 
 # Fallback user data when Google Sheets is not available
@@ -801,7 +796,13 @@ def generate_title_description():
 
 
 if __name__ == "__main__":
-   app.run(host="0.0.0.0", port=5000, debug=True)
+
+    import sys
+    print("✅ Flask app initialized successfully", file=sys.stderr, flush=True)
+    print(f"🚀 Starting Flask on port {os.environ.get('PORT', 8080)} ...", file=sys.stderr, flush=True)
+
+
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=False)
 
 
 

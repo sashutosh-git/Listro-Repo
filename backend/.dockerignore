@@ -1,0 +1,8 @@
+# Prevent sensitive or unnecessary files from being added to Docker image
+.env
+*.pyc
+__pycache__/
+node_modules/
+.git/
+.gitignore
+README.md

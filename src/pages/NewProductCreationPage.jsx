@@ -447,7 +447,7 @@ const NewProductCreationPage = () => {
   };
 
   const progress = calculateProgress();
-  const isFormComplete = progress.filled === progress.total;
+  const isFormComplete = progress.filled >= 6;
 
   // Show loading state while fetching golden product
   if (!goldenProduct) {

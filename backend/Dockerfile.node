@@ -1,0 +1,31 @@
+# Dockerfile.node (copy-paste replace)
+FROM node:18-bullseye
+
+# Install python3, pip and build tools for any python packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      python3 python3-pip python3-venv build-essential gcc && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy node files & install node deps (production)
+COPY package*.json ./
+RUN npm install --production
+
+# Copy everything (includes scraper.py, amz_scraper.py, requirements.txt)
+COPY . .
+
+# If you have a Python requirements.txt file in project root, install it.
+# If you don't have one, create it with: requests,beautifulsoup4,lxml (see note below)
+RUN if [ -f ./requirements.txt ]; then \
+      pip3 install --no-cache-dir -r ./requirements.txt ; \
+    else \
+      pip3 install --no-cache-dir requests beautifulsoup4 lxml ; \
+    fi
+
+# Expose the port Cloud Run expects
+EXPOSE 8080
+
+# Start the node server (the process which spawns python scrapers)
+CMD ["node", "server.js"]

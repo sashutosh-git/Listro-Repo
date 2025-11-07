@@ -16,9 +16,12 @@ const LoginPage = () => {
   const [resetStatus, setResetStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 🌍 Backend base URL (use env variable or fallback to localhost)
-  const BACKEND_URL =
-    import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+  // 🌍 Backend base URL (use Node backend for login/reset)
+  // Use only the Vite env var (no fallback)
+  const BACKEND_URL = import.meta.env.VITE_PYTHON_BACKEND_URL;
+
+
+
 
   // ✅ Handle login form
   const handleLogin = async (e) => {

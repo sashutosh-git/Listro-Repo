@@ -4,11 +4,71 @@ const cors = require('cors');
 const axios = require('axios');
 const { parse } = require('csv-parse/sync');
 const { spawn } = require('child_process');
+
+// --- Helper: run Python scraper safely ---
+
+
+async function runPythonScraper(scriptName, args = [], timeoutMs = 60000) {
+  return new Promise((resolve, reject) => {
+    const scriptPath = path.join(__dirname, scriptName);
+    const py = spawn("python3", [scriptPath, ...args], {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    const killTimer = setTimeout(() => {
+      py.kill("SIGKILL");
+      reject(new Error(`Python script timed out after ${timeoutMs / 1000}s`));
+    }, timeoutMs);
+
+    py.stdout.on("data", (data) => (stdout += data.toString()));
+    py.stderr.on("data", (data) => (stderr += data.toString()));
+
+    py.on("error", (err) => {
+      clearTimeout(killTimer);
+      reject(new Error(`Failed to start python3: ${err.message}`));
+    });
+
+    py.on("close", (code) => {
+      clearTimeout(killTimer);
+      if (code !== 0) {
+        return reject(
+          new Error(
+            `Python exited with code ${code}. stderr: ${stderr.slice(0, 300)}`
+          )
+        );
+      }
+      try {
+        const parsed = JSON.parse(stdout);
+        resolve(parsed);
+      } catch (e) {
+        reject(
+          new Error(
+            `Invalid JSON from Python. stdout: ${stdout.slice(
+              0,
+              200
+            )} stderr: ${stderr.slice(0, 200)}`
+          )
+        );
+      }
+    });
+  });
+}
+
+
+
+
+
+
+
+
 const { google } = require('googleapis');
 const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3000; 
+const PORT = process.env.PORT || 8080; 
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -848,12 +908,41 @@ app.get('/test-sheet', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'simple-test.html'));
 });
 
+
+
+
+// 🔍 Debug endpoint to test external HTTP fetch
+app.post("/api/debug-fetch", async (req, res) => {
+  const { url } = req.body;
+
+  if (!url) {
+    return res.status(400).json({ success: false, error: "Missing URL" });
+  }
+
+  try {
+    console.log("🔍 Running scraper for URL:", url);
+    const result = await runPythonScraper("scraper.py", [url]); // <-- Calls your Python scraper
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error("❌ Scraper failed:", err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+
+
 // Start server
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📊 Google Sheets integration: ACTIVE`);
-    console.log(`🔍 Python Scraper: READY (with mock data fallback)`);
-    console.log(`💡 Main App: http://localhost:${PORT}`);
-    console.log(`🔧 Scraper UI: http://localhost:${PORT}/scraper`);
-    console.log(`🐛 Debug: http://localhost:${PORT}/api/debug-sheet`);
+  const host =
+    process.env.K_SERVICE && process.env.GOOGLE_CLOUD_PROJECT
+      ? `https://${process.env.K_SERVICE}-${process.env.GOOGLE_CLOUD_PROJECT}.run.app`
+      : `http://localhost:${PORT}`;
+
+  console.log(`🚀 Server running on: ${host}`);
+  console.log(`📊 Google Sheets integration: ACTIVE`);
+  console.log(`🔍 Python Scraper: READY (with mock data fallback)`);
+  console.log(`💡 Main App: ${host}`);
+  console.log(`🔧 Scraper UI: ${host}/scraper`);
+  console.log(`🐛 Debug: ${host}/api/debug-sheet`);
 });

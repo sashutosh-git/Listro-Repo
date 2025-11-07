@@ -1,5 +1,4 @@
-
-
+import { API_URL } from "../api/api";
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import html2pdf from 'html2pdf.js';
@@ -15,19 +14,7 @@ const FinalPage = () => {
   const contentRef = useRef(null);
   const navigate = useNavigate();
 
-  const handleDownload = () => {
-    const element = contentRef.current;
-    const opt = {
-      margin: 1,
-      filename: 'product-comparison-report.pdf',
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2 },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-
-    html2pdf().set(opt).from(element).save();
-  };
-
+  // ✅ Enhanced Export with duplicate prevention
   const handleProceedAndExportToSheets = async () => {
     if (!comparisonData) {
       alert('No data available to export');
@@ -86,14 +73,14 @@ const FinalPage = () => {
       return 'N/A';
     };
 
-    // Get current date in day, month, year format
+    // Get current date
     const currentDate = new Date();
     const day = currentDate.getDate();
-    const month = currentDate.getMonth() + 1; // Months are 0-indexed
+    const month = currentDate.getMonth() + 1;
     const year = currentDate.getFullYear();
     const formattedDate = `${day}/${month}/${year}`;
 
-    // Map frontend data to Amazon template columns
+    // Comprehensive column headers
     const columnHeaders = [
       'Date', 'Number_of_attributes_with_errors', 'Number_of_attributes_with_other_suggestions', 'Product_Sub_type',
       'Seller_SKU', 'Brand_Name', 'Update_Delete', 'Manufacturer_Part_Number', 'Product_ID', 'Product_ID_Type',
@@ -337,42 +324,49 @@ const FinalPage = () => {
       'N/A'  // National_Stock_Number
     ];
 
-    // Upload to Google Sheets
+    // Upload to Google Sheets with duplicate prevention
     try {
       console.log('📤 Uploading to Google Sheets...');
 
-      // Prepare data for Google Sheets API (array of arrays)
       const sheetData = [
         columnHeaders, // First row: headers
         dataRow        // Second row: data
       ];
 
-      const response = await fetch('http://localhost:3000/api/upload-to-sheets', {
+      const response = await fetch(`${API_URL}/api/upload-to-sheets`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           csvData: sheetData,
+          sheetId: '1-azsWJHPgwUicaX1bdJUoH-4bFxR-sFmwtmFeeDUXgc',
+          tabName: 'Product_Data',
+          duplicateCheck: true, // Enable duplicate checking
+          duplicateKeys: ['Date', 'Seller_SKU'], // Check duplicates based on these columns
+          currentDate: formattedDate,
+          currentSellerSKU: safeValue(comparisonData.originalAsin)
         })
       });
 
       const result = await response.json();
 
       if (result.success) {
-        console.log('✅ Data uploaded to Google Sheets:', result.sheetUrl);
-        console.log('📊 Total rows now:', result.totalRowsNow);
-
-        // Open Google Sheets in a new tab
-        if (result.sheetUrl) {
-          window.open(result.sheetUrl, '_blank');
+        console.log('✅ Data processed in Google Sheets:', result);
+        
+        let message = '';
+        if (result.duplicateFound) {
+          message = `✅ Existing entry updated!\n\n📅 Date: ${formattedDate}\n📦 Seller SKU: ${comparisonData.originalAsin}\n\nEntry was updated instead of creating a duplicate.`;
+        } else {
+          message = `✅ New entry added!\n\n📅 Date: ${formattedDate}\n📦 Seller SKU: ${comparisonData.originalAsin}\n\nNew product data added to Google Sheet.`;
         }
 
-        const message = result.totalRowsNow > 1
-          ? `Success! \n\n✅ Product data appended to Google Sheet\n\nSheet: ${result.tabName}\nTotal products: ${result.totalRowsNow - 1}\n\nOpening Google Sheet in new tab...`
-          : `Success! \n\n✅ New sheet created and data uploaded\n\nSheet: ${result.tabName}\n\nOpening Google Sheet in new tab...`;
+        if (result.sheetUrl) {
+          window.open(result.sheetUrl, '_blank');
+          message += `\n\nOpening Google Sheet in new tab...`;
+        }
 
-        // alert(message);
+        alert(message);
       } else {
         console.error('❌ Failed to upload to Google Sheets:', result.error);
         alert('Failed to upload to Google Sheets: ' + result.error);
@@ -385,11 +379,7 @@ const FinalPage = () => {
     }
   };
 
-  const renderStars = (rating) => {
-    return "⭐".repeat(rating) + "☆".repeat(5 - rating);
-  };
-
-  // Image slider navigation
+  // Enhanced image slider navigation
   const nextImage = () => {
     if (allImages.length > 0) {
       setCurrentImageIndex((prev) => (prev + 1) % allImages.length);
@@ -406,185 +396,9 @@ const FinalPage = () => {
     setCurrentImageIndex(index);
   };
 
-  useEffect(() => {
-    // Get user info from localStorage or set default
-    const user = JSON.parse(localStorage.getItem('user')) || {
-      name: "John Doe",
-      email: "john.doe@example.com"
-    };
-    setUserInfo(user);
-
-    // Load existing product from localStorage
-    const storedExisting = localStorage.getItem('existingProduct');
-    const existingProductData = storedExisting ? JSON.parse(storedExisting) : null;
-
-    // Load all product images (existing + generated) from localStorage
-    const storedAllImages = localStorage.getItem('allProductImages');
-    let productImages = [];
-
-    if (storedAllImages) {
-      try {
-        productImages = JSON.parse(storedAllImages);
-        console.log('📸 Loaded all product images:', productImages);
-      } catch (error) {
-        console.error('Error parsing all product images:', error);
-      }
-    }
-
-    // Fallback: If no combined images, try to build from individual sources
-    if (productImages.length === 0) {
-      // Try loading generated images
-      const storedGeneratedImages = localStorage.getItem('generatedImages');
-      const generatedImages = storedGeneratedImages ? JSON.parse(storedGeneratedImages) : [];
-
-      // Add existing product images
-      if (existingProductData?.images && Array.isArray(existingProductData.images)) {
-        existingProductData.images.forEach((url, index) => {
-          productImages.push({
-            url: url,
-            type: 'existing',
-            label: `Existing Image ${index + 1}`
-          });
-        });
-      }
-
-      // Add generated images
-      if (generatedImages.length > 0) {
-        generatedImages.forEach((url, index) => {
-          productImages.push({
-            url: url,
-            type: 'generated',
-            label: `AI Generated ${index + 1}`
-          });
-        });
-      }
-
-      console.log('📦 Built combined images from individual sources:', productImages);
-    }
-
-    setAllImages(productImages);
-
-    // Load generated images from localStorage (for backward compatibility)
-    const storedGeneratedImages = localStorage.getItem('generatedImages');
-    const generatedImages = storedGeneratedImages ? JSON.parse(storedGeneratedImages) : [];
-
-    // Load gold standard product from localStorage
-    const storedGoldStandard = localStorage.getItem('goldStandardProduct');
-    const goldStandardData = storedGoldStandard ? JSON.parse(storedGoldStandard) : null;
-
-    // Load product attributes
-    const storedFilters = localStorage.getItem('productFilters');
-    const productAttributes = storedFilters ? JSON.parse(storedFilters) : {};
-
-    console.log('📦 Loaded existing product:', existingProductData);
-    console.log('🎨 Loaded generated images:', generatedImages);
-    console.log('⭐ Loaded gold standard:', goldStandardData);
-    console.log('🏷️ Loaded attributes:', productAttributes);
-
-    // Build comparison data from existing product
-    if (existingProductData) {
-      // Extract features from existing product ONLY (not gold standard)
-      const existingFeatures = extractFeatures(existingProductData);
-      console.log('✨ Features extracted from EXISTING product:', existingFeatures);
-      console.log('🔍 Existing product features property:', existingProductData.features);
-
-      const data = {
-        // Original Product (Existing Product)
-        originalTitle: existingProductData.title || 'N/A',
-        originalPrice: extractPrice(existingProductData) || 0,
-        originalAsin: existingProductData.asin || existingProductData.id || 'N/A',
-        originalImage: (existingProductData.images && existingProductData.images[0]) || 'https://placehold.co/400x400/E5E7EB/6B7280?text=No+Image',
-        originalRating: extractRating(existingProductData) || 0,
-        originalReviews: extractReviews(existingProductData) || 0,
-
-        // Competitor Product (Gold Standard - if available)
-        competitorTitle: goldStandardData?.title || 'Gold Standard Product',
-        competitorPrice: extractPrice(goldStandardData) || 0,
-        competitorAsin: goldStandardData?.asin || goldStandardData?.id || 'N/A',
-        competitorImage: (goldStandardData?.images && goldStandardData.images[0]) || 'https://placehold.co/400x400/E5E7EB/6B7280?text=No+Image',
-        competitorRating: extractRating(goldStandardData) || 0,
-        competitorReviews: extractReviews(goldStandardData) || 0,
-
-        // Generated Images
-        generatedImages: generatedImages || [],
-
-        // Product Details
-        description: existingProductData.description || 'No description available',
-        features: existingFeatures,
-
-        // Brand Information
-        brandComparison: {
-          original: existingProductData.brand || extractBrand(existingProductData) || 'N/A',
-          competitor: goldStandardData?.brand || extractBrand(goldStandardData) || 'N/A'
-        },
-
-        // Product Attributes
-        productAttributes: productAttributes,
-
-        // Additional Details
-        productDetails: existingProductData.productDetailsArray || [],
-        manufacturingDetails: existingProductData.manufacturingDetailsArray || [],
-
-        // Metadata
-        department: extractDepartment(existingProductData) || productAttributes.Category || 'General',
-        category: productAttributes.Category || 'N/A',
-        subcategory: productAttributes.Subcategory || productAttributes.SubCategory || 'N/A',
-
-        // Sizes and Colors (extract from product details or use defaults)
-        sizes: extractSizes(existingProductData) || ['S', 'M', 'L', 'XL', 'XXL'],
-        colors: extractColors(existingProductData) || ['Default'],
-
-        // Similarity score (can be calculated or set to default)
-        similarityScore: 0,
-
-        // Notes
-        notes: generateComparisonNotes(existingProductData, goldStandardData, productAttributes),
-
-        deliveryDate: `Delivery by ${getEstimatedDelivery()}`
-      };
-
-      setComparisonData(data);
-      console.log('✅ Built comparison data:', data);
-    } else {
-      // Fallback to default data if no existing product
-      console.warn('⚠️ No existing product found in localStorage, using default data');
-      const defaultData = {
-        originalTitle: "Product Not Found",
-        originalPrice: 0,
-        originalAsin: "N/A",
-        originalImage: "https://placehold.co/400x400/E5E7EB/6B7280?text=No+Product",
-        originalRating: 0,
-        originalReviews: 0,
-
-        competitorTitle: "No Gold Standard",
-        competitorPrice: 0,
-        competitorAsin: "N/A",
-        competitorImage: "https://placehold.co/400x400/E5E7EB/6B7280?text=No+Image",
-        competitorRating: 0,
-        competitorReviews: 0,
-
-        generatedImages: generatedImages || [],
-        similarityScore: 0,
-        notes: "No product data available. Please go back and select a product.",
-
-        brandComparison: {
-          original: "N/A",
-          competitor: "N/A"
-        },
-        features: [],
-        sizes: [],
-        colors: [],
-        deliveryDate: "N/A"
-      };
-
-      setComparisonData(defaultData);
-    }
-  }, [navigate]);
-
-  // Helper functions to extract data from product
+  // Enhanced data extraction functions from previous version
   const extractPrice = (product) => {
     if (!product) return 0;
-    // Try to find price in various formats
     if (product.price) return parseFloat(product.price);
     if (product.productDetails?.Price) return parseFloat(product.productDetails.Price);
     if (product.productDetailsArray) {
@@ -596,29 +410,11 @@ const FinalPage = () => {
     return 0;
   };
 
-  const extractRating = (product) => {
-    if (!product) return 0;
-    if (product.rating) return parseFloat(product.rating);
-    if (product.productDetails?.Rating) return parseFloat(product.productDetails.Rating);
-    return 0;
-  };
-
-  const extractReviews = (product) => {
-    if (!product) return 0;
-    if (product.reviews) return parseInt(product.reviews);
-    if (product.reviewCount) return parseInt(product.reviewCount);
-    if (product.productDetails?.Reviews) return parseInt(product.productDetails.Reviews);
-    return 0;
-  };
-
   const extractBrand = (product) => {
     if (!product) return null;
     if (product.brand) return product.brand;
-
-    // Try to extract from manufacturing details
     if (product.manufacturingDetails?.Manufacturer) {
       const manufacturer = product.manufacturingDetails.Manufacturer;
-      // Extract brand name (first part before comma)
       return manufacturer.split(',')[0].trim();
     }
     if (product.productDetailsArray) {
@@ -627,119 +423,120 @@ const FinalPage = () => {
       );
       if (brandDetail) return brandDetail.value;
     }
-
     if (product.productDetails?.Brand) {
       return product.productDetails.Brand;
     }
-
-
-
     return null;
   };
 
   const extractFeatures = (product) => {
-    console.log('🔧 extractFeatures called with product:', product);
-    if (!product) {
-      console.log('⚠️ No product provided to extractFeatures');
-      return [];
-    }
-
-    // If features array exists, use it (THIS IS THE PRIMARY SOURCE)
+    if (!product) return [];
     if (product.features && Array.isArray(product.features) && product.features.length > 0) {
-      console.log('✅ Found features array in product:', product.features);
-      console.log('📊 Number of features:', product.features.length);
       return product.features;
     }
-
-    console.log('⚠️ No features array found in product, trying fallback methods');
-
-    // Try to extract from description
     const features = [];
     if (product.description) {
       features.push(product.description);
-      console.log('📝 Added description as feature:', product.description);
     }
-
-    // Add generic features from product details
     if (product.productDetails?.Department) {
       features.push(`Department: ${product.productDetails.Department}`);
     }
     if (product.productDetails?.['Generic Name']) {
       features.push(`Type: ${product.productDetails['Generic Name']}`);
     }
-
-    console.log('🔚 Final features array:', features.length > 0 ? features : ['No features available']);
     return features.length > 0 ? features : ['No features available'];
   };
 
   const extractDepartment = (product) => {
     if (!product) return null;
     if (product.productDetails?.Department) return product.productDetails.Department;
-
-    // Search in productDetailsArray
     if (product.productDetailsArray) {
       const deptDetail = product.productDetailsArray.find(d =>
         d.label && d.label.toLowerCase().includes('department')
       );
       if (deptDetail) return deptDetail.value;
     }
-
     return null;
   };
 
-  const extractSizes = (product) => {
-    if (!product) return null;
-    // This would need to be extracted from product variations or details
-    // For now, return null to use defaults
-    return null;
-  };
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user')) || {
+      name: 'John Doe',
+      email: 'john@example.com',
+    };
+    setUserInfo(user);
 
-  const extractColors = (product) => {
-    if (!product) return null;
-    // This would need to be extracted from product variations or details
-    // For now, return null to use defaults
-    return null;
-  };
+    const existing = JSON.parse(localStorage.getItem('existingProduct'));
+    const images = JSON.parse(localStorage.getItem('allProductImages')) || [];
+    const generated = JSON.parse(localStorage.getItem('generatedImages')) || [];
+    const goldStandard = JSON.parse(localStorage.getItem('goldStandardProduct'));
+    const filters = JSON.parse(localStorage.getItem('productFilters')) || {};
 
-  const generateComparisonNotes = (existingProduct, goldStandard, attributes) => {
-    if (!existingProduct) return 'No product data available for comparison.';
+    // Enhanced image handling from previous version
+    const allImgs = images.length
+      ? images
+      : [
+        ...(existing?.images || []).map((url, index) => ({
+          url: url,
+          type: 'existing',
+          label: `Existing Image ${index + 1}`
+        })),
+        ...generated.map((url, index) => ({
+          url: url,
+          type: 'generated',
+          label: `AI Generated ${index + 1}`
+        }))
+      ];
 
-    let notes = '';
+    setAllImages(allImgs);
 
-    if (goldStandard) {
-      notes += `Comparing "${existingProduct.title}" with gold standard "${goldStandard.title}". `;
-    } else {
-      notes += `Analyzing product: "${existingProduct.title}". `;
+    if (existing) {
+      // Enhanced data extraction from previous version
+      const data = {
+        // Original Product
+        originalTitle: existing.title || 'N/A',
+        originalPrice: extractPrice(existing) || 0,
+        originalAsin: existing.asin || existing.id || 'N/A',
+
+        // Competitor Product (if available)
+        competitorTitle: goldStandard?.title || 'Gold Standard Product',
+        competitorPrice: extractPrice(goldStandard) || 0,
+        competitorAsin: goldStandard?.asin || goldStandard?.id || 'N/A',
+
+        // Product Information
+        brandComparison: {
+          original: extractBrand(existing) || 'N/A',
+          competitor: extractBrand(goldStandard) || 'N/A'
+        },
+        category: filters.Category || 'N/A',
+        subcategory: filters.Subcategory || filters.SubCategory || 'N/A',
+        department: extractDepartment(existing) || filters.Category || 'General',
+        
+        // Content
+        features: extractFeatures(existing),
+        description: existing.description || 'No description available',
+        productDetails: existing.productDetailsArray || [],
+        manufacturingDetails: existing.manufacturingDetailsArray || [],
+
+        // Additional data
+        productAttributes: filters,
+        similarityScore: 0,
+        notes: existing.description || 'No additional notes available.',
+      };
+      setComparisonData(data);
     }
+  }, [navigate]);
 
-    if (attributes && Object.keys(attributes).length > 0) {
-      notes += `Product attributes: ${Object.entries(attributes).map(([k, v]) => `${k}: ${v}`).join(', ')}. `;
-    }
-
-    if (existingProduct.description) {
-      console.log(existingProduct.description);
-      notes += existingProduct.description;
-    }
-
-    return notes || 'No additional notes available.';
-  };
-
-  const getEstimatedDelivery = () => {
-    const date = new Date();
-    date.setDate(date.getDate() + 3); // 3 days from now
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  if (!comparisonData || !userInfo) {
+  if (!comparisonData || !userInfo)
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
       </div>
     );
-  }
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Enhanced Navbar from previous version */}
       <nav className="bg-[#131921] text-white px-4 py-2">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="text-2xl font-bold">Amazon</div>
@@ -755,6 +552,7 @@ const FinalPage = () => {
         </div>
       </nav>
 
+      {/* Enhanced header from previous version */}
       <div className="bg-[#232f3e] text-white px-4 py-2 mb-4">
         <div className="max-w-7xl mx-auto">
           <div className="text-lg text-center">
@@ -763,13 +561,13 @@ const FinalPage = () => {
         </div>
       </div>
 
+      {/* Enhanced Product Preview - Previous Final Page UI */}
       <div ref={contentRef} className="max-w-7xl mx-auto p-4">
-
         <div className="grid grid-cols-12 gap-6">
-          {/* Left Column - Image */}
+          {/* Left Column - Enhanced Image Gallery */}
           <div className="col-span-5">
             <div className="sticky top-4">
-              {/* Main Image Display with Slider */}
+              {/* Enhanced Image Display with Slider */}
               <div className="border p-4 mb-4 bg-white rounded-lg">
                 <div className="h-[500px] flex items-center justify-center bg-gray-50 relative group rounded-lg overflow-hidden">
                   {allImages.length > 0 ? (
@@ -783,7 +581,7 @@ const FinalPage = () => {
                         }}
                       />
 
-                      {/* Navigation Arrows */}
+                      {/* Enhanced Navigation Arrows */}
                       {allImages.length > 1 && (
                         <>
                           <button
@@ -805,13 +603,13 @@ const FinalPage = () => {
 
                       {/* Image Type Badge */}
                       <div className="absolute top-3 left-3">
-                        {/* <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           allImages[currentImageIndex]?.type === 'generated' 
                             ? 'bg-blue-500 text-white' 
                             : 'bg-green-500 text-white'
                         }`}>
                           {allImages[currentImageIndex]?.type === 'generated' ? '🎨 AI Generated' : '📦 Existing'}
-                        </span> */}
+                        </span>
                       </div>
 
                       {/* Image Counter */}
@@ -835,7 +633,7 @@ const FinalPage = () => {
                 </div>
               </div>
 
-              {/* Thumbnail Strip */}
+              {/* Enhanced Thumbnail Strip */}
               {allImages.length > 0 && (
                 <div className="border rounded-lg p-3 bg-white">
                   <div className="flex gap-2 overflow-x-auto pb-2">
@@ -866,65 +664,52 @@ const FinalPage = () => {
                       </div>
                     ))}
                   </div>
-                  {/* <p className="text-xs text-gray-500 mt-2 text-center">
+                  <p className="text-xs text-gray-500 mt-2 text-center">
                     Click thumbnails to view • {allImages.filter(img => img.type === 'existing').length} Existing • {allImages.filter(img => img.type === 'generated').length} AI Generated
-                  </p> */}
+                  </p>
                 </div>
               )}
-
-              {/* <div className="bg-[#fef8f2] border border-[#f4d499] rounded p-3 mt-4">
-                <div className="text-sm">
-                  <span className="font-bold text-[#c45500]">Similarity Score: </span>
-                  <span className="text-[#c45500]">{comparisonData?.similarityScore}% match with original product</span>
-                </div>
-              </div> */}
             </div>
           </div>
 
-          {/* Right Column - Product Details */}
+          {/* Right Column - Enhanced Product Details */}
           <div className="col-span-7">
+            {/* Product Header */}
             <div className="border-b border-[#e7e7e7] pb-4">
               <h1 className="text-xl font-medium mb-2">
-                {comparisonData?.originalTitle}
+                {comparisonData.originalTitle}
               </h1>
-              {/* <div className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-2 text-sm">
                 <div className="text-[#0F1111]">
                   <span className="text-[#007185] hover:text-[#c45500] cursor-pointer">
-                    {comparisonData?.brandComparison.original}
+                    {comparisonData.brandComparison.original}
                   </span>
                 </div>
-                <span className="text-[#707070]">|</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-[#f2c200]">{renderStars(comparisonData?.originalRating)}</span>
-                  <span className="text-[#007185] hover:text-[#c45500] cursor-pointer">
-                    {comparisonData?.originalReviews} ratings
-                  </span>
-                </div>
-              </div> */}
+              </div>
             </div>
+
             {/* Price Section */}
             <div className="py-4 border-b border-[#e7e7e7]">
               <div className="text-[#0F1111]">
                 <span className="text-sm">Price:</span>
                 <span className="text-[28px] text-[#0F1111] ml-2">
-                  ₹{comparisonData?.originalPrice}
+                  ₹{comparisonData.originalPrice}
                 </span>
               </div>
 
-              {comparisonData?.competitorPrice > 0 && (
+              {comparisonData.competitorPrice > 0 && (
                 <div className="mt-1">
                   <div className="inline-flex items-center bg-[#fef8f2] px-2 py-1 rounded">
                     <span className="text-sm text-[#c45500]">
-                      {comparisonData?.originalPrice < comparisonData?.competitorPrice
+                      {comparisonData.originalPrice < comparisonData.competitorPrice
                         ? 'Lower price than gold standard by '
                         : 'Higher price than gold standard by '}
-                      ${Math.abs(comparisonData?.originalPrice - comparisonData?.competitorPrice).toFixed(2)}
+                      ₹{Math.abs(comparisonData.originalPrice - comparisonData.competitorPrice).toFixed(2)}
                     </span>
                   </div>
                 </div>
               )}
             </div>
-
 
             {/* Product Information */}
             <div className="py-4 border-b border-[#e7e7e7]">
@@ -932,31 +717,25 @@ const FinalPage = () => {
                 <tbody>
                   <tr>
                     <td className="py-1 pr-4 align-top text-[#565959]" style={{ width: '120px' }}>Brand</td>
-                    <td className="py-1 text-[#0F1111]">{comparisonData?.brandComparison.original}</td>
+                    <td className="py-1 text-[#0F1111]">{comparisonData.brandComparison.original}</td>
                   </tr>
                   <tr>
                     <td className="py-1 pr-4 align-top text-[#565959]">ASIN</td>
-                    <td className="py-1 text-[#0F1111]">{comparisonData?.originalAsin}</td>
+                    <td className="py-1 text-[#0F1111]">{comparisonData.originalAsin}</td>
                   </tr>
-                  <tr>
-                    {/* <td className="py-1 pr-4 align-top text-[#565959]">Rating</td> */}
-                    {/* <td className="py-1 text-[#0F1111]">
-                      {comparisonData?.originalRating} out of 5 ({comparisonData?.originalReviews} reviews)
-                    </td> */}
-                  </tr>
-                  {comparisonData?.category && comparisonData.category !== 'N/A' && (
+                  {comparisonData.category && comparisonData.category !== 'N/A' && (
                     <tr>
                       <td className="py-1 pr-4 align-top text-[#565959]">Category</td>
                       <td className="py-1 text-[#0F1111]">{comparisonData.category}</td>
                     </tr>
                   )}
-                  {comparisonData?.subcategory && comparisonData.subcategory !== 'N/A' && (
+                  {comparisonData.subcategory && comparisonData.subcategory !== 'N/A' && (
                     <tr>
                       <td className="py-1 pr-4 align-top text-[#565959]">Subcategory</td>
                       <td className="py-1 text-[#0F1111]">{comparisonData.subcategory}</td>
                     </tr>
                   )}
-                  {comparisonData?.department && comparisonData.department !== 'General' && (
+                  {comparisonData.department && comparisonData.department !== 'General' && (
                     <tr>
                       <td className="py-1 pr-4 align-top text-[#565959]">Department</td>
                       <td className="py-1 text-[#0F1111]">{comparisonData.department}</td>
@@ -966,7 +745,7 @@ const FinalPage = () => {
               </table>
 
               {/* Product Attributes */}
-              {/* {comparisonData?.productAttributes && Object.keys(comparisonData.productAttributes).length > 0 && (
+              {comparisonData.productAttributes && Object.keys(comparisonData.productAttributes).length > 0 && (
                 <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200">
                   <h4 className="text-xs font-semibold text-blue-900 mb-2">Product Attributes</h4>
                   <div className="flex flex-wrap gap-2">
@@ -977,7 +756,7 @@ const FinalPage = () => {
                     ))}
                   </div>
                 </div>
-              )} */}
+              )}
             </div>
 
             {/* Features */}
@@ -986,7 +765,7 @@ const FinalPage = () => {
                 <h3 className="text-[#0F1111] font-medium text-lg">About this item</h3>
               </div>
               <ul className="list-disc pl-5 space-y-1 text-sm text-[#0F1111]">
-                {comparisonData?.features && comparisonData.features.length > 0 ? (
+                {comparisonData.features && comparisonData.features.length > 0 ? (
                   comparisonData.features.map((feature, index) => (
                     <li key={index}>{feature}</li>
                   ))
@@ -996,18 +775,16 @@ const FinalPage = () => {
               </ul>
             </div>
 
-            <div className='border-b border-[#e7e7e7] pb-4'>
-              {comparisonData?.description && (
-                <div className="mt-2">
-                  <h4 className="text-[#0F1111] font-medium text-lg">Product Description</h4>
-                  <p className="text-sm text-[#0F1111] pt-2">{comparisonData.description}</p>
-                </div>
-
-              )}
-            </div>
+            {/* Product Description */}
+            {comparisonData.description && (
+              <div className='border-b border-[#e7e7e7] pb-4 pt-4'>
+                <h4 className="text-[#0F1111] font-medium text-lg">Product Description</h4>
+                <p className="text-sm text-[#0F1111] pt-2">{comparisonData.description}</p>
+              </div>
+            )}
 
             {/* Product Details */}
-            {comparisonData?.productDetails && comparisonData.productDetails.length > 0 && (
+            {comparisonData.productDetails && comparisonData.productDetails.length > 0 && (
               <div className="py-4 border-b border-[#e7e7e7]">
                 <h3 className="text-[#0F1111] font-medium text-lg mb-2">Product Details</h3>
                 <table className="w-full text-sm">
@@ -1026,7 +803,7 @@ const FinalPage = () => {
             )}
 
             {/* Manufacturing Details */}
-            {comparisonData?.manufacturingDetails && comparisonData.manufacturingDetails.length > 0 && (
+            {comparisonData.manufacturingDetails && comparisonData.manufacturingDetails.length > 0 && (
               <div className="py-4 border-b border-[#e7e7e7]">
                 <h3 className="text-[#0F1111] font-medium text-lg mb-2">Manufacturing Details</h3>
                 <table className="w-full text-sm">
@@ -1044,57 +821,8 @@ const FinalPage = () => {
               </div>
             )}
 
-            {/* Size & Color Options */}
-            {((comparisonData?.sizes && comparisonData.sizes.length > 0) ||
-              (comparisonData?.colors && comparisonData.colors.length > 0)) && (
-                <div className="py-4 border-[#e7e7e7]">
-                  {comparisonData?.sizes && comparisonData.sizes.length > 0 && (
-                    <div className="mb-4">
-                      {/* <span className="text-sm font-medium text-[#0F1111]">Size: </span>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {comparisonData.sizes.map((size, index) => (
-                          <button
-                            key={index}
-                            className="min-w-[60px] px-3 py-1 border border-[#D5D9D9] rounded-lg text-sm
-                            hover:border-[#007185] cursor-pointer"
-                          >
-                            {size}
-                          </button>
-                        ))}
-                      </div> */}
-                    </div>
-                  )}
-                  {/* {comparisonData?.colors && comparisonData.colors.length > 0 && (
-                    <div>
-                      <span className="text-sm font-medium text-[#0F1111]">Color: </span>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {comparisonData.colors.map((color, index) => (
-                          <button
-                            key={index}
-                            className="min-w-[60px] px-3 py-1 border border-[#D5D9D9] rounded-lg text-sm
-                            hover:border-[#007185] cursor-pointer"
-                          >
-                            {color}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )} */}
-                </div>
-              )}
-
-            {/* Delivery & Analysis */}
-            <div className="py-4 space-y-4">
-              {/* <div className="text-[#007600] font-medium">
-                  {comparisonData?.deliveryDate}
-                </div> */}
-
-              {/* <div className="bg-[#F4F4F4] p-4 rounded">
-                  <h3 className="text-[#0F1111] font-medium mb-2">Comparison Analysis</h3>
-                  <p className="text-sm text-[#333333] leading-relaxed">{comparisonData?.notes}</p>
-                </div> */}
-
-              {/* Action Buttons */}
+            {/* Action Buttons */}
+            <div className="py-4">
               <div className="flex flex-col gap-3 mt-6">
                 <button
                   onClick={handleProceedAndExportToSheets}
@@ -1115,27 +843,14 @@ const FinalPage = () => {
                     'Export to Google Sheets'
                   )}
                 </button>
-                {/* <button
-                    onClick={handleDownload}
-                    className="w-full bg-[#F0F2F2] hover:bg-[#DFE1E1] text-[#0F1111] py-2 px-4 rounded-lg 
-                    shadow-sm border border-[#D5D9D9]"
-                  >
-                    Download PDF Report
-                  </button>
-                  <button
-                    onClick={() => window.print()}
-                    className="w-full bg-[#F0F2F2] hover:bg-[#DFE1E1] text-[#0F1111] py-2 px-4 rounded-lg
-                    shadow-sm border border-[#D5D9D9]"
-                  >
-                    Print Report
-                  </button> */}
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 };
 
 export default FinalPage;
+

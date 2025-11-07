@@ -12,9 +12,8 @@ export default function ChangePasswordPage() {
   const email = searchParams.get("email");
   const token = searchParams.get("token");
 
-  // ✅ Base URL from .env (fallback to localhost)
- const API_BASE = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-
+  // ✅ Use Node backend URL from .env (Cloud Run)
+  const API_BASE = import.meta.env.VITE_NODE_BACKEND_URL;
 
   useEffect(() => {
     if (!email) {
@@ -42,7 +41,6 @@ export default function ChangePasswordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, token }),
       });
-
 
       // ✅ Handle non-JSON error pages (like 404 HTML)
       const text = await response.text();
@@ -73,11 +71,10 @@ export default function ChangePasswordPage() {
 
         {error && <p className="text-red-600 mb-3 text-sm text-center">{error}</p>}
         {message && (
-        <div className="mb-3 text-center bg-green-100 border border-green-300 text-green-800 text-sm font-medium rounded-lg p-2 animate-fade-in">
-               ✅ {message || "Password reset successfully!"}
-        </div>
-)}
-
+          <div className="mb-3 text-center bg-green-100 border border-green-300 text-green-800 text-sm font-medium rounded-lg p-2 animate-fade-in">
+            ✅ {message || "Password reset successfully!"}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <label className="block mb-2 text-gray-700 text-sm font-medium">

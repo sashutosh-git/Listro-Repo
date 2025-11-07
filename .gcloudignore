@@ -1,0 +1,5 @@
+# Minimal .gcloudignore for frontend build
+.git
+.gitignore
+node_modules
+dist

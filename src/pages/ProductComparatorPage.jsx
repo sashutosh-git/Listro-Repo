@@ -839,7 +839,7 @@ const handleAIGenerateTitle = async () => {
 
 
 
-   const response = await fetch("http://localhost:5000/api/generate-title-description", {
+   const response = await fetch(`${import.meta.env.VITE_PYTHON_BACKEND_URL}/api/generate-title-description`, {
      method: "POST",
      headers: { "Content-Type": "application/json" },
      body: JSON.stringify(aiPayload),
@@ -912,7 +912,7 @@ const handleAIGenerateDescription = async () => {
 
 
 
-   const response = await fetch("http://localhost:5000/api/generate-title-description", {
+   const response =  await fetch(`${import.meta.env.VITE_PYTHON_BACKEND_URL}/api/generate-title-description`, {
      method: "POST",
      headers: { "Content-Type": "application/json" },
      body: JSON.stringify(aiPayload),
